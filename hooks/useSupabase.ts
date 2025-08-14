@@ -122,37 +122,42 @@ export function useProfile() {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .limit(1)
-        .single();
+        .limit(1);
 
-      if (error && error.code !== 'PGRST116') throw error;
+      if (error) throw error;
       
-      if (data) {
+      // Handle both single record and array responses
+      const profileData = Array.isArray(data) ? data[0] : data;
+      
+      if (profileData) {
         // Transform database format to app format
         const transformedProfile: Profile = {
-          fullName: data.full_name,
-          email: data.email,
-          phone: data.phone,
-          companyName: data.company_name,
-          website: data.website || '',
-          address: data.address,
-          bankAccount: data.bank_account,
-          authorizedSigner: data.authorized_signer,
-          idNumber: data.id_number || '',
-          bio: data.bio || '',
-          incomeCategories: Array.isArray(data.income_categories) ? data.income_categories as string[] : [],
-          expenseCategories: Array.isArray(data.expense_categories) ? data.expense_categories as string[] : [],
-          projectTypes: Array.isArray(data.project_types) ? data.project_types as string[] : [],
-          eventTypes: Array.isArray(data.event_types) ? data.event_types as string[] : [],
-          assetCategories: Array.isArray(data.asset_categories) ? data.asset_categories as string[] : [],
-          sopCategories: Array.isArray(data.sop_categories) ? data.sop_categories as string[] : [],
-          projectStatusConfig: Array.isArray(data.project_status_config) ? data.project_status_config as any[] : [],
-          notificationSettings: data.notification_settings as any || { newProject: true, paymentConfirmation: true, deadlineReminder: true },
-          securitySettings: data.security_settings as any || { twoFactorEnabled: false },
-          briefingTemplate: data.briefing_template,
-          termsAndConditions: data.terms_and_conditions || '',
+          fullName: profileData.full_name,
+          email: profileData.email,
+          phone: profileData.phone,
+          companyName: profileData.company_name,
+          website: profileData.website || '',
+          address: profileData.address,
+          bankAccount: profileData.bank_account,
+          authorizedSigner: profileData.authorized_signer,
+          idNumber: profileData.id_number || '',
+          bio: profileData.bio || '',
+          incomeCategories: Array.isArray(profileData.income_categories) ? profileData.income_categories as string[] : [],
+          expenseCategories: Array.isArray(profileData.expense_categories) ? profileData.expense_categories as string[] : [],
+          projectTypes: Array.isArray(profileData.project_types) ? profileData.project_types as string[] : [],
+          eventTypes: Array.isArray(profileData.event_types) ? profileData.event_types as string[] : [],
+          assetCategories: Array.isArray(profileData.asset_categories) ? profileData.asset_categories as string[] : [],
+          sopCategories: Array.isArray(profileData.sop_categories) ? profileData.sop_categories as string[] : [],
+          projectStatusConfig: Array.isArray(profileData.project_status_config) ? profileData.project_status_config as any[] : [],
+          notificationSettings: profileData.notification_settings as any || { newProject: true, paymentConfirmation: true, deadlineReminder: true },
+          securitySettings: profileData.security_settings as any || { twoFactorEnabled: false },
+          briefingTemplate: profileData.briefing_template,
+          termsAndConditions: profileData.terms_and_conditions || '',
         };
         setProfile(transformedProfile);
+      } else {
+        // No profile found - this should not happen after migration
+        setError('No profile found. Please contact administrator.');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch profile');
@@ -163,6 +168,10 @@ export function useProfile() {
 
   const updateProfile = async (updates: Partial<Profile>) => {
     try {
+      if (!profile) {
+        throw new Error('No profile to update');
+      }
+      
       // Transform app format to database format
       const dbUpdates = {
         full_name: updates.fullName,
@@ -198,7 +207,8 @@ export function useProfile() {
 
       const { data, error } = await supabase
         .from('profiles')
-        .upsert([dbUpdates])
+        .update(dbUpdates)
+        .eq('id', profile.id || (await supabase.from('profiles').select('id').limit(1).single()).data?.id)
         .select()
         .single();
 
